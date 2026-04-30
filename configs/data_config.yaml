@@ -3,6 +3,8 @@ train_path: "Data/train"
 test_path: "Data/test"
 processed_data_path: "Data/processed"
 image_size: 48
+batch_size: 64
+num_classes: 7
 class_names:
   - angry
   - disgust
