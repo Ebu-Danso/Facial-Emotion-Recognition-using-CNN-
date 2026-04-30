@@ -1,0 +1,13 @@
+raw_data_path: "Data"
+train_path: "Data/train"
+test_path: "Data/test"
+processed_data_path: "Data/processed"
+image_size: 48
+class_names:
+  - angry
+  - disgust
+  - fear
+  - happy
+  - neutral
+  - sad
+  - surprise
