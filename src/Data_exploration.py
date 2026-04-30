@@ -14,7 +14,7 @@ import matplotlib.patches as mpatches
 import warnings
 warnings.filterwarnings("ignore")
 
-from src.Dataset import get_dataloaders, count_images_in_dir
+from src.dataset import get_dataloaders, count_images_in_dir
 from src.utils import load_config, ensure_dirs, get_class_names
 
 
