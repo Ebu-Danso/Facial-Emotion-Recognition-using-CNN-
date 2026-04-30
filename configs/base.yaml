@@ -1,0 +1,38 @@
+# ─────────────────────────────────────────────────────────────
+# base.yaml — Configuration for Facial Emotion Recognition
+# ─────────────────────────────────────────────────────────────
+
+# Paths
+data:
+  train_dir: "data/train"
+  test_dir:  "data/test"
+
+# Image settings
+image:
+  img_size:    48
+  color_mode:  "grayscale"
+
+# Training settings
+training:
+  batch_size:     64
+  epochs:         50
+  learning_rate:  0.001
+  patience:       7           # early stopping patience
+
+# Class labels (FER2013)
+classes:
+  - angry
+  - disgust
+  - fear
+  - happy
+  - neutral
+  - sad
+  - surprise
+
+# Output paths
+output:
+  model_path:          "results/cnn_emotion_model.h5"
+  training_plot:       "results/training_history.png"
+  confusion_matrix:    "results/confusion_matrix.png"
+  distribution_plot:   "results/class_distribution.png"
+  sample_images_plot:  "results/sample_images.png"
