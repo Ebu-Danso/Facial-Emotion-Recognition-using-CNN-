@@ -12,7 +12,6 @@ venv/
 .env/
 
 # Model/checkpoint files
-*.h5
 *.pt
 *.pth
 *.pkl
