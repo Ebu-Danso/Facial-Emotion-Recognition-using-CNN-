@@ -1,7 +1,21 @@
-venv/
-__pychache__/
-venv/
+# Dataset and data folders
+Data/
+!Data/.gitkeep
+!Data/train/
+!Data/train/.gitkeep
+!Data/test/
+!Data/test/.gitkeep
+!Data/processed/
+!Data/processed/.gitkeep
+
+# Archive and data export files
+*.zip
+*.csv
+
+# Python caches and environment
 __pycache__/
 *.pyc
+.ipynb_checkpoints/
+venv/
 *.h5
 *.dylib
