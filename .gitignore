@@ -1,21 +1,22 @@
-# Dataset and data folders
-Data/
-!Data/.gitkeep
-!Data/train/
-!Data/train/.gitkeep
-!Data/test/
-!Data/test/.gitkeep
-!Data/processed/
-!Data/processed/.gitkeep
-
-# Archive and data export files
+# Dataset archives and exported data files
 *.zip
 *.csv
 
-# Python caches and environment
+# Python cache files
 __pycache__/
 *.pyc
 .ipynb_checkpoints/
+
+# Virtual environments
 venv/
+.env/
+
+# Model/checkpoint files
 *.h5
-*.dylib
+*.pt
+*.pth
+*.pkl
+
+# System files
+.DS_Store
+Thumbs.db
