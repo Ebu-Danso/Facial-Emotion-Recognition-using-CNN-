@@ -17,7 +17,21 @@ except ImportError:
     print("Missing dependency: PyYAML is required to read the config file. Install with `pip install pyyaml`.")
     sys.exit(1)
 
-SUPPORTED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".gif", ".pgm", ".ppm"}
+
+SUPPORTED_IMAGE_EXTENSIONS = {
+    ".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".gif", ".pgm", ".ppm"
+}
+
+
+DEFAULT_CLASS_NAMES = [
+    "angry",
+    "disgust",
+    "fear",
+    "happy",
+    "neutral",
+    "sad",
+    "surprise",
+]
 
 
 def load_config(config_path: Path) -> Dict:
@@ -31,6 +45,86 @@ def load_config(config_path: Path) -> Dict:
         raise ValueError("Invalid config format. Expected a YAML mapping.")
 
     return config
+
+
+def get_data_settings(config: Dict, root_dir: Path) -> Tuple[Path, Path, Path, Path, int, List[str]]:
+    """
+    Read dataset settings from either:
+
+    New nested base.yaml style:
+        data:
+          train_dir: Data/train
+          test_dir: Data/test
+          processed_dir: Data/processed
+          class_names: [...]
+        image:
+          img_size: 48
+
+    Or older flat style:
+        raw_data_path: Data
+        train_path: Data/train
+        test_path: Data/test
+        processed_data_path: Data/processed
+        image_size: 48
+        class_names: [...]
+    """
+
+    data_config = config.get("data", {})
+    image_config = config.get("image", {})
+
+    raw_dir = data_config.get(
+        "raw_dir",
+        data_config.get(
+            "raw_data_path",
+            config.get("raw_data_path", "Data")
+        )
+    )
+
+    train_dir = data_config.get(
+        "train_dir",
+        data_config.get(
+            "train_path",
+            config.get("train_path", "Data/train")
+        )
+    )
+
+    test_dir = data_config.get(
+        "test_dir",
+        data_config.get(
+            "test_path",
+            config.get("test_path", "Data/test")
+        )
+    )
+
+    processed_dir = data_config.get(
+        "processed_dir",
+        data_config.get(
+            "processed_data_path",
+            config.get("processed_data_path", "Data/processed")
+        )
+    )
+
+    image_size = image_config.get(
+        "img_size",
+        image_config.get(
+            "image_size",
+            config.get("image_size", 48)
+        )
+    )
+
+    class_names = data_config.get(
+        "class_names",
+        config.get("class_names", DEFAULT_CLASS_NAMES)
+    )
+
+    raw_dir = root_dir / Path(raw_dir)
+    train_dir = root_dir / Path(train_dir)
+    test_dir = root_dir / Path(test_dir)
+    processed_dir = root_dir / Path(processed_dir)
+    image_size = int(image_size)
+    class_names = list(class_names)
+
+    return raw_dir, train_dir, test_dir, processed_dir, image_size, class_names
 
 
 def validate_folder(path: Path, description: str) -> None:
@@ -54,14 +148,21 @@ def scan_classes(class_paths: Dict[str, Path]) -> Tuple[Dict[str, int], List[Pat
             missing_or_empty.append(class_path)
             class_counts[class_name] = 0
             continue
+
         if not class_path.is_dir():
             unsupported_files.append(class_path)
             class_counts[class_name] = 0
             continue
 
         files = [path for path in class_path.iterdir() if path.is_file()]
-        valid_files = [path for path in files if path.suffix.lower() in SUPPORTED_IMAGE_EXTENSIONS]
-        invalid_files = [path for path in files if path.suffix.lower() not in SUPPORTED_IMAGE_EXTENSIONS]
+        valid_files = [
+            path for path in files
+            if path.suffix.lower() in SUPPORTED_IMAGE_EXTENSIONS
+        ]
+        invalid_files = [
+            path for path in files
+            if path.suffix.lower() not in SUPPORTED_IMAGE_EXTENSIONS
+        ]
 
         class_counts[class_name] = len(valid_files)
         unsupported_files.extend(invalid_files)
@@ -78,9 +179,12 @@ def inspect_image(image_path: Path) -> Tuple[bool, str, str, Tuple[int, int]]:
             original_mode = image.mode
             original_size = image.size
             accepted = image_path.suffix.lower() in SUPPORTED_IMAGE_EXTENSIONS
+
             if not accepted:
                 return False, original_mode, "unsupported format", original_size
+
             return True, original_mode, "ok", original_size
+
     except Exception as exc:
         return False, "unknown", f"cannot open image: {exc}", (0, 0)
 
@@ -93,8 +197,10 @@ def print_summary(train_counts: Dict[str, int], test_counts: Dict[str, int], cla
     print("===========================")
     print(f"{'Class':<10} {'Train':>7} {'Test':>7}")
     print("---------------------------")
+
     for name in class_names:
         print(f"{name:<10} {train_counts.get(name, 0):7d} {test_counts.get(name, 0):7d}")
+
     print("---------------------------")
     print(f"{'TOTAL':<10} {total_train:7d} {total_test:7d}\n")
 
@@ -102,8 +208,10 @@ def print_summary(train_counts: Dict[str, int], test_counts: Dict[str, int], cla
 def process_image(source_path: Path, destination_path: Path, size: int) -> None:
     with Image.open(source_path) as image:
         image = image.convert("L")
+
         if image.size != (size, size):
             image = image.resize((size, size), Image.BILINEAR)
+
         destination_path.parent.mkdir(parents=True, exist_ok=True)
         image.save(destination_path)
 
@@ -132,10 +240,12 @@ def build_processed_dataset(
             for image_path in sorted(source_path.iterdir()):
                 if not image_path.is_file():
                     continue
+
                 if image_path.suffix.lower() not in SUPPORTED_IMAGE_EXTENSIONS:
                     continue
 
                 destination_path = destination_dir / image_path.name
+
                 try:
                     process_image(image_path, destination_path, image_size)
                 except Exception as exc:
@@ -148,28 +258,36 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Validate the FER2013 dataset folder structure and optionally build a processed dataset."
     )
+
     parser.add_argument(
         "--config",
         default=None,
-        help="Path to the data config YAML file. Default: configs/data_config.yaml",
+        help="Path to the config YAML file. Default: configs/base.yaml",
     )
+
     parser.add_argument(
         "--build-processed",
         action="store_true",
         help="Create a processed dataset in the configured processed data path.",
     )
+
     parser.add_argument(
         "--rebuild",
         action="store_true",
         help="Rebuild the processed dataset by overwriting files in the processed folder.",
     )
+
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
     root_dir = Path(__file__).resolve().parents[1]
-    config_path = Path(args.config) if args.config else root_dir / "configs" / "data_config.yaml"
+
+    config_path = Path(args.config) if args.config else root_dir / "configs" / "base.yaml"
+
+    if not config_path.is_absolute():
+        config_path = root_dir / config_path
 
     try:
         config = load_config(config_path)
@@ -177,12 +295,10 @@ def main() -> None:
         print(f"Error reading config: {exc}")
         sys.exit(1)
 
-    raw_dir = root_dir / Path(config.get("raw_data_path", "Data"))
-    train_dir = root_dir / Path(config.get("train_path", "Data/train"))
-    test_dir = root_dir / Path(config.get("test_path", "Data/test"))
-    processed_dir = root_dir / Path(config.get("processed_data_path", "Data/processed"))
-    image_size = int(config.get("image_size", 48))
-    class_names = list(config.get("class_names", []))
+    raw_dir, train_dir, test_dir, processed_dir, image_size, class_names = get_data_settings(
+        config,
+        root_dir,
+    )
 
     try:
         validate_folder(raw_dir, "raw data folder")
@@ -214,22 +330,31 @@ def main() -> None:
             print(f"  - {file_path}")
 
     print("\nChecking image files for correct dimensions and grayscale compatibility...")
+
     bad_images: List[Path] = []
-    processed_image_shapes: Dict[str, int] = {"wrong_size": 0, "not_grayscale": 0, "bad_files": 0}
+    processed_image_shapes: Dict[str, int] = {
+        "wrong_size": 0,
+        "not_grayscale": 0,
+        "bad_files": 0,
+    }
 
     for image_path in sorted(train_dir.rglob("*")) + sorted(test_dir.rglob("*")):
         if not image_path.is_file():
             continue
+
         if image_path.suffix.lower() not in SUPPORTED_IMAGE_EXTENSIONS:
             continue
 
         valid, mode, status, size = inspect_image(image_path)
+
         if not valid or status != "ok":
             processed_image_shapes["bad_files"] += 1
             bad_images.append(image_path)
             continue
+
         if size != (image_size, image_size):
             processed_image_shapes["wrong_size"] += 1
+
         if mode not in {"L", "LA", "I;16", "I", "1", "P"}:
             processed_image_shapes["not_grayscale"] += 1
 
@@ -239,7 +364,11 @@ def main() -> None:
             print(f"  - {bad_path}")
         print("Please remove or replace these files before processing.")
 
-    if processed_image_shapes["wrong_size"] == 0 and processed_image_shapes["not_grayscale"] == 0 and not bad_images:
+    if (
+        processed_image_shapes["wrong_size"] == 0
+        and processed_image_shapes["not_grayscale"] == 0
+        and not bad_images
+    ):
         print("All detected images are valid and readable.")
     else:
         print("\nImage check results:")

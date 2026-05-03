@@ -32,7 +32,7 @@ def prepare_config(config: dict) -> dict:
     - config["training"]["batch_size"]
 
     This function allows data_exploration.py to still work even if
-    configs/data_config.yaml uses flatter keys like train_path, test_path,
+    configs/base.yaml uses flatter keys like train_path, test_path,
     image_size, and batch_size.
     """
 
@@ -226,7 +226,7 @@ def print_dataset_summary(train_counts: dict, test_counts: dict) -> None:
 # ─────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    config = load_config("configs/data_config.yaml")
+    config = load_config("configs/base.yaml")
     config = prepare_config(config)
 
     ensure_dirs(config)
