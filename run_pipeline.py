@@ -1,245 +1,269 @@
 """
 run_pipeline.py — Run the complete Facial Emotion Recognition pipeline
 
-This script orchestrates the entire project workflow in the correct order:
+Pipeline order:
   1. Data Preparation
   2. Data Exploration
   3. Model Training
   4. Evaluation
 
 Usage:
-  python run_pipeline.py                          # Run all steps
-  python run_pipeline.py --skip-explore           # Skip data exploration
-  python run_pipeline.py --skip-train             # Skip training
-  python run_pipeline.py --skip-evaluate          # Skip evaluation
-  python run_pipeline.py --skip-train --skip-evaluate  # Multiple skips
+  python run_pipeline.py
+  python run_pipeline.py --skip-prep
+  python run_pipeline.py --skip-explore
+  python run_pipeline.py --skip-train
+  python run_pipeline.py --skip-evaluate
+  python run_pipeline.py --skip-train --skip-evaluate
 """
 
 import argparse
-import os
 import subprocess
 import sys
 from pathlib import Path
 
 
-# ─────────────────────────────────────────────────────────────
-# COLOR CODES FOR TERMINAL OUTPUT
-# ─────────────────────────────────────────────────────────────
-
 class Colors:
-    """ANSI color codes for terminal output"""
-    HEADER = '\033[95m'
-    BLUE = '\033[94m'
-    CYAN = '\033[96m'
-    GREEN = '\033[92m'
-    YELLOW = '\033[93m'
-    RED = '\033[91m'
-    END = '\033[0m'
-    BOLD = '\033[1m'
+    CYAN = "\033[96m"
+    GREEN = "\033[92m"
+    YELLOW = "\033[93m"
+    RED = "\033[91m"
+    BLUE = "\033[94m"
+    END = "\033[0m"
+    BOLD = "\033[1m"
 
 
 def print_header(text: str) -> None:
-    """Print a colorful section header"""
-    print(f"\n{Colors.BOLD}{Colors.CYAN}{'='*70}{Colors.END}")
+    print(f"\n{Colors.BOLD}{Colors.CYAN}{'=' * 70}{Colors.END}")
     print(f"{Colors.BOLD}{Colors.CYAN}{text.center(70)}{Colors.END}")
-    print(f"{Colors.BOLD}{Colors.CYAN}{'='*70}{Colors.END}\n")
+    print(f"{Colors.BOLD}{Colors.CYAN}{'=' * 70}{Colors.END}\n")
 
 
 def print_success(text: str) -> None:
-    """Print a success message"""
     print(f"{Colors.GREEN}✓ {text}{Colors.END}")
 
 
 def print_error(text: str) -> None:
-    """Print an error message"""
     print(f"{Colors.RED}✗ {text}{Colors.END}")
 
 
 def print_warning(text: str) -> None:
-    """Print a warning message"""
     print(f"{Colors.YELLOW}⚠ {text}{Colors.END}")
 
 
 def print_info(text: str) -> None:
-    """Print an info message"""
     print(f"{Colors.BLUE}ℹ {text}{Colors.END}")
 
 
-# ─────────────────────────────────────────────────────────────
-# VALIDATION & SETUP
-# ─────────────────────────────────────────────────────────────
+def validate_project_files(project_root: Path) -> bool:
+    """
+    Check required project files before running the pipeline.
+    The project now uses configs/base.yaml as the main config file.
+    """
+    required_files = [
+        project_root / "configs" / "base.yaml",
+        project_root / "src" / "__init__.py",
+        project_root / "src" / "data_preparation.py",
+        project_root / "src" / "data_exploration.py",
+        project_root / "src" / "dataset.py",
+        project_root / "src" / "model.py",
+        project_root / "src" / "train.py",
+    ]
+
+    missing_files = [file for file in required_files if not file.exists()]
+
+    if missing_files:
+        print_error("Required project files are missing:")
+        for file in missing_files:
+            print_error(f"  {file}")
+        return False
+
+    print_success("Required project files found")
+    return True
+
 
 def validate_data_folders(project_root: Path) -> bool:
     """
     Check that Data/train and Data/test exist.
-    Return True if valid, False otherwise.
+    This does not verify every image. data_preparation.py handles that.
     """
     train_dir = project_root / "Data" / "train"
     test_dir = project_root / "Data" / "test"
 
     if not train_dir.exists():
-        print_error("Data/train folder not found!")
-        print_warning("Please download the FER2013 dataset from Kaggle:")
-        print_info("  https://www.kaggle.com/datasets/msambare/fer2013")
-        print_warning("Extract images into Data/train and Data/test with emotion subdirectories:")
+        print_error("Data/train folder not found")
+        print_warning("Expected structure:")
         print_info("  Data/train/{angry,disgust,fear,happy,neutral,sad,surprise}/")
-        print_info("  Data/test/{angry,disgust,fear,happy,neutral,sad,surprise}/")
         return False
 
     if not test_dir.exists():
-        print_error("Data/test folder not found!")
-        print_warning("Please download the FER2013 dataset from Kaggle:")
-        print_info("  https://www.kaggle.com/datasets/msambare/fer2013")
-        print_warning("Extract images into Data/train and Data/test with emotion subdirectories:")
-        print_info("  Data/train/{angry,disgust,fear,happy,neutral,sad,surprise}/")
+        print_error("Data/test folder not found")
+        print_warning("Expected structure:")
         print_info("  Data/test/{angry,disgust,fear,happy,neutral,sad,surprise}/")
         return False
 
-    print_success(f"Data/train found")
-    print_success(f"Data/test found")
+    print_success("Data/train found")
+    print_success("Data/test found")
     return True
 
 
 def ensure_results_folder(project_root: Path) -> None:
-    """Create results folder if it doesn't exist"""
+    """Create results folder if it does not exist."""
     results_dir = project_root / "results"
     results_dir.mkdir(exist_ok=True)
-    print_success("Results folder is ready")
+    print_success("results/ folder is ready")
 
 
-def run_step(project_root: Path, module_name: str, step_name: str, args: list = None) -> bool:
+def run_step(project_root: Path, module_name: str, step_name: str, step_args=None) -> bool:
     """
-    Run a Python module as a subprocess.
-    Returns True if successful, False if failed.
-    
-    Args:
-        project_root: Root directory of the project
-        module_name: Module name to run (e.g., "src.data_preparation")
-        step_name: Human-readable step name for output
-        args: Optional list of additional arguments to pass to the script
+    Run a pipeline step using the current Python interpreter.
+
+    Example:
+      python -m src.data_preparation --config configs/base.yaml
     """
     print_header(f"Step: {step_name}")
 
-    try:
-        cmd = [sys.executable, "-m", module_name]
-        if args:
-            cmd.extend(args)
+    cmd = [sys.executable, "-m", module_name]
 
-        result = subprocess.run(
+    if step_args:
+        cmd.extend(step_args)
+
+    print_info("Running command:")
+    print_info("  " + " ".join(cmd))
+
+    try:
+        subprocess.run(
             cmd,
             cwd=str(project_root),
             check=True,
-            text=True,
-            capture_output=False,
         )
+        print_success(f"{step_name} completed successfully")
+        return True
 
-        if result.returncode == 0:
-            print_success(f"{step_name} completed successfully")
-            return True
-
-    except subprocess.CalledProcessError as e:
-        print_error(f"{step_name} failed with return code {e.returncode}")
-        return False
-    except Exception as e:
-        print_error(f"{step_name} encountered an error: {e}")
+    except subprocess.CalledProcessError as error:
+        print_error(f"{step_name} failed with return code {error.returncode}")
         return False
 
-    return False
 
-
-# ─────────────────────────────────────────────────────────────
-# MAIN PIPELINE
-# ─────────────────────────────────────────────────────────────
-
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Run the Facial Emotion Recognition pipeline",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  python run_pipeline.py                              Run all steps
-  python run_pipeline.py --skip-explore               Skip data exploration
-  python run_pipeline.py --skip-train                 Skip training
-  python run_pipeline.py --skip-evaluate              Skip evaluation
-  python run_pipeline.py --skip-train --skip-evaluate Skip training and evaluation
-        """
+        description="Run the full Facial Emotion Recognition pipeline"
+    )
+
+    parser.add_argument(
+        "--skip-prep",
+        action="store_true",
+        help="Skip data preparation",
     )
 
     parser.add_argument(
         "--skip-explore",
         action="store_true",
-        help="Skip data exploration step"
+        help="Skip data exploration",
     )
+
     parser.add_argument(
         "--skip-train",
         action="store_true",
-        help="Skip model training step"
+        help="Skip model training",
     )
+
     parser.add_argument(
         "--skip-evaluate",
         action="store_true",
-        help="Skip evaluation step"
+        help="Skip evaluation",
+    )
+
+    parser.add_argument(
+        "--build-processed",
+        action="store_true",
+        help="Build Data/processed during data preparation",
     )
 
     args = parser.parse_args()
 
-    # Determine project root
     project_root = Path(__file__).parent.resolve()
+    config_path = "configs/base.yaml"
 
-    # Print welcome message
     print(f"\n{Colors.BOLD}{Colors.GREEN}")
     print("╔════════════════════════════════════════════════════════╗")
-    print("║   Facial Emotion Recognition - Full Pipeline Runner    ║")
+    print("║   Facial Emotion Recognition - Full Pipeline Runner   ║")
     print("╚════════════════════════════════════════════════════════╝")
     print(f"{Colors.END}")
 
-    # Pre-flight checks
     print_header("Pre-flight Checks")
     print_info(f"Project root: {project_root}")
+    print_info(f"Config file: {config_path}")
+
+    if not validate_project_files(project_root):
+        print_error("Pipeline aborted because required files are missing.")
+        sys.exit(1)
 
     if not validate_data_folders(project_root):
-        print_error("Pipeline aborted: Missing dataset folders")
+        print_error("Pipeline aborted because dataset folders are missing.")
         sys.exit(1)
 
     ensure_results_folder(project_root)
 
-    # Pipeline steps
+    data_prep_args = ["--config", config_path]
+
+    if args.build_processed:
+        data_prep_args.append("--build-processed")
+
     steps = [
-        ("src.data_preparation", "Data Preparation", False, ["--config", "configs/base.yaml", "--build-processed"]),
-        ("src.data_exploration", "Data Exploration", args.skip_explore, None),
-        ("src.train", "Model Training", args.skip_train, None),
-        ("src.evaluate", "Evaluation", args.skip_evaluate, None),
+        (
+            "src.data_preparation",
+            "Data Preparation",
+            args.skip_prep,
+            data_prep_args,
+        ),
+        (
+            "src.data_exploration",
+            "Data Exploration",
+            args.skip_explore,
+            None,
+        ),
+        (
+            "src.train",
+            "Model Training",
+            args.skip_train,
+            None,
+        ),
+        (
+            "src.evaluate",
+            "Evaluation",
+            args.skip_evaluate,
+            None,
+        ),
     ]
 
-    failed_steps = []
+    failed_step = None
     skipped_steps = []
 
-    for module_name, step_name, skip, step_args in steps:
-        if skip:
+    for module_name, step_name, skip_step, step_args in steps:
+        if skip_step:
             print_header(f"Step: {step_name}")
-            print_warning(f"{step_name} skipped (--skip flag)")
+            print_warning(f"{step_name} skipped")
             skipped_steps.append(step_name)
             continue
 
         success = run_step(project_root, module_name, step_name, step_args)
-        if not success:
-            failed_steps.append(step_name)
-            break  # Stop on first failure
 
-    # Summary
+        if not success:
+            failed_step = step_name
+            break
+
     print_header("Pipeline Summary")
 
-    if failed_steps:
-        print_error(f"Pipeline failed at: {failed_steps[0]}")
-        print_info("Fix the error and run the pipeline again.")
+    if failed_step:
+        print_error(f"Pipeline failed at: {failed_step}")
+        print_info("Fix the error above and run the pipeline again.")
         sys.exit(1)
 
     if skipped_steps:
         print_warning(f"Steps skipped: {', '.join(skipped_steps)}")
 
-    print_success("All pipeline steps completed successfully!")
-    print_info("Check the results/ folder for model and outputs.")
-    print(f"\n{Colors.GREEN}{Colors.BOLD}Pipeline execution successful!{Colors.END}\n")
+    print_success("All selected pipeline steps completed successfully.")
+    print_info("Check the results/ folder for generated outputs.")
 
 
 if __name__ == "__main__":
